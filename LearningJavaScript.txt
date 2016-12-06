@@ -4597,20 +4597,1945 @@ JavaScript
 				由于Node环境执行的JavaScript代码是服务器端代码，所以，绝大部分需要在服务器运行期反复执行业务逻辑的代码，必须使用异步代码
 				否则，同步代码在执行时期，服务器将停止响应，因为JavaScript只有一个执行线程
 				服务器启动时如果需要读取配置文件，或者结束时需要写入到状态文件时，可以使用同步代码，因为这些代码只在启动和结束时执行一次，不影响服务器正常运行时的异步执行。
+			stream
+				流的特点是数据是有序的，而且必须依次读取，或者依次写入，不能像Array那样随机定位
+				在Node.js中，流也是一个对象，我们只需要响应流的事件就可以
+					data事件表示流的数据已经可以读取
+					end事件表示这个流已经到末尾了，没有数据可以读取了
+					error事件表示出错了
+					
+					从文件流读取文本内容的示例
+						'use strict';
+						var fs = require('fs');
 
+						// 打开一个流:
+						var rs = fs.createReadStream('sample.txt', 'utf-8');
 
+						rs.on('data', function (chunk) {
+							console.log('DATA:')
+							console.log(chunk);
+						});
 
+						rs.on('end', function () {
+							console.log('END');
+						});
 
+						rs.on('error', function (err) {
+							console.log('ERROR: ' + err);
+						});
+						要注意，data事件可能会有多次，每次传递的chunk是流的一部分数据。
+					以流的形式写入文件，只需要不断调用write()方法，最后以end()结束
+						'use strict';
+						var fs = require('fs');
+
+						var ws1 = fs.createWriteStream('output1.txt', 'utf-8');
+						ws1.write('使用Stream写入文本数据...\n');
+						ws1.write('END.');
+						ws1.end();
+
+						var ws2 = fs.createWriteStream('output2.txt');
+						ws2.write(new Buffer('使用Stream写入二进制数据...\n', 'utf-8'));
+						ws2.write(new Buffer('END.', 'utf-8'));
+						ws2.end();
+					所有可以读取数据的流都继承自stream.Readable
+					所有可以写入的流都继承自stream.Writable。
+				pipe
+					两个流也可以串起来。
+					一个Readable流和一个Writable流串起来后，所有的数据自动从Readable流进入Writable流，这种操作叫pipe
+					在Node.js中，Readable流有一个pipe()方法
+					用pipe()把一个文件流和另一个文件流串起来，这样源文件的所有数据就自动写入到目标文件里了，实际上是一个复制文件的程序
+						'use strict';
+						var fs = require('fs');
+
+						var rs = fs.createReadStream('sample.txt');
+						var ws = fs.createWriteStream('copied.txt');
+
+						rs.pipe(ws);
+						默认情况下，当Readable流的数据读取完毕，end事件触发后，将自动关闭Writable流。
+						如果我们不希望自动关闭Writable流，需要传入参数
+							readable.pipe(writable, { end: false });
+			http
+				应用程序并不直接和HTTP协议打交道，而是操作http模块提供的request和response对象
+					request对象封装了HTTP请求，我们调用request对象的属性和方法就可以拿到所有HTTP请求的信息；
+					response对象封装了HTTP响应，我们操作response对象的方法，就可以把HTTP响应返回给浏览器。
+					用Node.js实现一个HTTP服务器程序hello.js，它对于所有请求，都返回Hello world!
+						'use strict';
+						// 导入http模块:
+						var http = require('http');
+
+						// 创建http server，并传入回调函数:
+						var server = http.createServer(function (request, response) {
+							// 回调函数接收request和response对象,
+							// 获得HTTP请求的method和url:
+							console.log(request.method + ': ' + request.url);
+							// 将HTTP响应200写入response, 同时设置Content-Type: text/html:
+							response.writeHead(200, {'Content-Type': 'text/html'});
+							// 将HTTP响应的HTML内容写入response:
+							response.end('<h1>Hello world!</h1>');
+						});
+
+						// 让服务器监听8080端口:
+						server.listen(8080);
+
+						console.log('Server is running at http://127.0.0.1:8080/');
+						
+						命令提示符下运行该程序，可以看到以下输出：
+							$ node hello.js 
+							Server is running at http://127.0.0.1:8080/
+				文件服务器
+					让Web程序变成一个文件服务器，只需要解析request.url中的路径，然后在本地找到对应的文件，把文件内容发送出去就可以了
+						解析URL需要用到Node.js提供的url模块
+						通过parse()将一个字符串解析为一个Url对象
+							'use strict';
+							var url = require('url');
+							console.log(url.parse('http://user:pass@host.com:8080/path/to/file?query=string#hash'));
+						结果如下：
+							Url {
+							  protocol: 'http:',
+							  slashes: true,
+							  auth: 'user:pass',
+							  host: 'host.com:8080',
+							  port: '8080',
+							  hostname: 'host.com',
+							  hash: '#hash',
+							  search: '?query=string',
+							  query: 'query=string',
+							  pathname: '/path/to/file',
+							  path: '/path/to/file?query=string',
+							  href: 'http://user:pass@host.com:8080/path/to/file?query=string#hash' }
+						处理本地文件目录需要使用Node.js提供的path模块，它可以方便地构造目录
+							'use strict';
+							var path = require('path');
+
+							// 解析当前目录:
+							var workDir = path.resolve('.'); // '/Users/michael'
+
+							// 组合完整的文件路径:当前目录+'pub'+'index.html':
+							var filePath = path.join(workDir, 'pub', 'index.html');
+							// '/Users/michael/pub/index.html'
 							
+							使用path模块可以正确处理操作系统相关的文件路径，我们就不关心怎么拼接路径了。
+						实现一个文件服务器file_server.js
+							'use strict';
+							var
+								fs = require('fs'),
+								url = require('url'),
+								path = require('path'),
+								http = require('http');
 
+							// 从命令行参数获取root目录，默认是当前目录:
+							var root = path.resolve(process.argv[2] || '.');
 
+							console.log('Static root dir: ' + root);
 
-			
-			
-			
-			
-			
-			
+							// 创建服务器:
+							var server = http.createServer(function (request, response) {
+								// 获得URL的path，类似 '/css/bootstrap.css':
+								var pathname = url.parse(request.url).pathname;
+								// 获得对应的本地文件路径，类似 '/srv/www/css/bootstrap.css':
+								var filepath = path.join(root, pathname);
+								// 获取文件状态:
+								fs.stat(filepath, function (err, stats) {
+									if (!err && stats.isFile()) {
+										// 没有出错并且文件存在:
+										console.log('200 ' + request.url);
+										// 发送200响应:
+										response.writeHead(200);
+										// 将文件流导向response:
+										fs.createReadStream(filepath).pipe(response);
+									} else {
+										// 出错了或者文件不存在:
+										console.log('404 ' + request.url);
+										// 发送404响应:
+										response.writeHead(404);
+										response.end('404 Not Found');
+									}
+								});
+							});
+
+							server.listen(8080);
+
+							console.log('Server is running at http://127.0.0.1:8080/');
+							
+							只要当前目录下存在文件index.html，服务器就可以把文件内容发送给浏览器
+							控制台输出：
+								200 /index.html
+								200 /css/uikit.min.css
+								200 /js/jquery.min.js
+								200 /fonts/fontawesome-webfont.woff2
+			crypto
+				crypto模块的目的是为了提供通用的加密和哈希算法
+				Nodejs用C/C++实现这些算法后，通过cypto这个模块暴露为JavaScript接口，这样用起来方便，运行速度也快
+				MD5和SHA1
+					MD5是一种常用的哈希算法，用于给任意数据一个“签名”
+					这个签名通常用一个十六进制的字符串表示：
+						const crypto = require('crypto');
+						const hash = crypto.createHash('md5');
+
+						// 可任意多次调用update():
+						hash.update('Hello, world!');
+						hash.update('Hello, nodejs!');
+						console.log(hash.digest('hex')); // 7e1977739c748beac0c0fd14fd26a544
+					update()方法默认字符串编码为UTF-8，也可以传入Buffer
+					如果要计算SHA1，只需要把'md5'改成'sha1'，就可以得到SHA1的结果1f32b9c9932c02227819a4151feed43e131aca40
+					还可以使用更安全的sha256和sha512
+				Hmac
+					Hmac算法也是一种哈希算法，它可以利用MD5或SHA1等哈希算法。不同的是，Hmac还需要一个密钥
+						const crypto = require('crypto');
+						const hmac = crypto.createHmac('sha256', 'secret-key');
+
+						hmac.update('Hello, world!');
+						hmac.update('Hello, nodejs!');
+
+						console.log(hmac.digest('hex')); // 80f7e22570...
+					只要密钥发生了变化，那么同样的输入数据也会得到不同的签名，因此，可以把Hmac理解为用随机数“增强”的哈希算法
+				AES
+					AES是一种常用的对称加密算法，加解密都用同一个密钥
+					crypto模块提供了AES支持，但是需要自己封装好函数
+						const crypto = require('crypto');
+
+						function aesEncrypt(data, key) {
+							const cipher = crypto.createCipher('aes192', key);
+							var crypted = cipher.update(data, 'utf8', 'hex');
+							crypted += cipher.final('hex');
+							return crypted;
+						}
+
+						function aesDecrypt(encrypted, key) {
+							const decipher = crypto.createDecipher('aes192', key);
+							var decrypted = decipher.update(encrypted, 'hex', 'utf8');
+							decrypted += decipher.final('utf8');
+							return decrypted;
+						}
+
+						var data = 'Hello, this is a secret message!';
+						var key = 'Password!';
+						var encrypted = aesEncrypt(data, key);
+						var decrypted = aesDecrypt(encrypted, key);
+
+						console.log('Plain text: ' + data);
+						console.log('Encrypted text: ' + encrypted);
+						console.log('Decrypted text: ' + decrypted);
+						
+						运行结果如下：
+							Plain text: Hello, this is a secret message!
+							Encrypted text: 8a944d97bdabc157a5b7a40cb180e7...
+							Decrypted text: Hello, this is a secret message!
+					注意到AES有很多不同的算法，如aes192，aes-128-ecb，aes-256-cbc等
+					AES除了密钥外还可以指定IV（Initial Vector），不同的系统只要IV不同，用相同的密钥加密相同的数据得到的加密结果也是不同的
+					加密结果通常有两种表示方法：hex和base64，这些功能Nodejs全部都支持
+					但是在应用中要注意，如果加解密双方一方用Nodejs，另一方用Java、PHP等其它语言，需要仔细测试
+				Diffie-Hellman
+					DH算法是一种密钥交换协议，它可以让双方在不泄漏密钥的情况下协商出一个密钥来
+					DH算法基于数学原理
+						比如小明和小红想要协商一个密钥，可以这么做
+							1,小明先选一个素数和一个底数，例如，素数p=23，底数g=5（底数可以任选），再选择一个秘密整数a=6，计算A=g^a mod p=8，然后大声告诉小红：p=23，g=5，A=8；
+							2,小红收到小明发来的p，g，A后，也选一个秘密整数b=15，然后计算B=g^b mod p=19，并大声告诉小明：B=19；
+							3,小明自己计算出s=B^a mod p=2，小红也自己计算出s=A^b mod p=2，因此，最终协商的密钥s为2。
+							第三方只能知道p=23，g=5，A=8，B=19，由于不知道双方选的秘密整数a=6和b=15，因此无法计算出密钥2
+					用crypto模块实现DH算法如下
+						const crypto = require('crypto');
+						// xiaoming's keys:
+						var ming = crypto.createDiffieHellman(512);
+						var ming_keys = ming.generateKeys();
+
+						var prime = ming.getPrime();
+						var generator = ming.getGenerator();
+
+						console.log('Prime: ' + prime.toString('hex'));
+						console.log('Generator: ' + generator.toString('hex'));
+
+						// xiaohong's keys:
+						var hong = crypto.createDiffieHellman(prime, generator);
+						var hong_keys = hong.generateKeys();
+
+						// exchange and generate secret:
+						var ming_secret = ming.computeSecret(hong_keys);
+						var hong_secret = hong.computeSecret(ming_keys);
+
+						// print secret:
+						console.log('Secret of Xiao Ming: ' + ming_secret.toString('hex'));
+						console.log('Secret of Xiao Hong: ' + hong_secret.toString('hex'));
+					运行后，可以得到如下输出
+						$ node dh.js 
+						Prime: a8224c...deead3
+						Generator: 02
+						Secret of Xiao Ming: 695308...d519be
+						Secret of Xiao Hong: 695308...d519be
+					注意每次输出都不一样，因为素数的选择是随机的
+				证书
+					crypto模块也可以处理数字证书
+					数字证书通常用在SSL连接，也就是Web的https连接
+					一般情况下，https连接只需要处理服务器端的单向认证，如无特殊需求（例如自己作为Root给客户发认证证书），建议用反向代理服务器如Nginx等Web服务器去处理证书
+
+		Web开发
+			后来随着PC机的兴起，软件开始主要运行在桌面上，而数据库这样的软件运行在服务器端，这种Client/Server模式简称CS架构。
+			CS架构不适合Web，最大的原因是Web应用程序的修改和升级非常迅速，因此，Browser/Server模式开始流行，简称BS架构。
+			在BS架构下，客户端只需要浏览器，应用程序的逻辑和数据都存储在服务器端
+			Web页面也具有极强的交互性
+			由于Node.js把JavaScript引入了服务器端，因此，原来必须使用PHP/Java/C#/Python/Ruby等其他语言来开发服务器端程序，现在可以使用Node.js开发了
+			用Node.js开发Web服务器端，有几个显著的优势：
+				一是后端语言也是JavaScript，以前掌握了前端JavaScript的开发人员，现在可以同时编写后端代码；
+				二是前后端统一使用JavaScript，就没有切换语言的障碍了；
+				三是速度快，非常快！这得益于Node.js天生是异步的。
+			Web框架koa
+				koa简介
+					koa是Express的下一代基于Node.js的web框架
+					Express
+						Express是第一代最流行的web框架，它对Node.js的http进行了封装
+							var express = require('express');
+							var app = express();
+
+							app.get('/', function (req, res) {
+								res.send('Hello World!');
+							});
+
+							app.listen(3000, function () {
+								console.log('Example app listening on port 3000!');
+							});
+						虽然Express的API很简单，但是它是基于ES5的语法，要实现异步代码，只有一个方法：回调
+						如果异步嵌套层次过多，代码写起来就非常难看
+							app.get('/test', function (req, res) {
+								fs.readFile('/file1', function (err, data) {
+									if (err) {
+										res.status(500).send('read file1 error');
+									}
+									fs.readFile('/file2', function (err, data) {
+										if (err) {
+											res.status(500).send('read file2 error');
+										}
+										res.type('text/plain');
+										res.send(data);
+									});
+								});
+							});
+					koa 1.0
+						koa 1.0使用generator实现异步
+							var koa = require('koa');
+							var app = koa();
+
+							app.use('/test', function *() {
+								yield doReadFile1();
+								var data = yield doReadFile2();
+								this.body = data;
+							});
+
+							app.listen(3000);
+						用generator实现异步比回调简单了不少，但是generator的本意并不是异步
+						Promise才是为异步设计的，但是Promise的写法复杂
+						为了简化异步代码，ES7引入了新的关键字async和await，可以轻松地把一个function变为异步模式
+							async function () {
+								var data = await fs.read('/file1');
+							}
+					koa2
+						koa2完全使用Promise并配合async来实现异步
+							app.use(async (ctx, next) => {
+								await next();
+								var data = await doReadFile();
+								ctx.response.type = 'text/plain';
+								ctx.response.body = data;
+							});
+				koa入门
+					创建koa2工程
+						首先，我们创建一个目录hello-koa并作为工程目录用VS Code打开
+						然后，我们创建app.js，输入
+							// 导入koa，和koa 1.x不同，在koa2中，我们导入的是一个class，因此用大写的Koa表示:
+							const Koa = require('koa');
+
+							// 创建一个Koa对象表示web app本身:
+							const app = new Koa();
+
+							// 对于任何请求，app将调用该异步函数处理请求：
+							app.use(async (ctx, next) => {
+								await next();
+								ctx.response.type = 'text/html';
+								ctx.response.body = '<h1>Hello, koa2!</h1>';
+							});
+
+							// 在端口3000监听:
+							app.listen(3000);
+							console.log('app started at port 3000...');
+							
+							其中，参数ctx是由koa传入的封装了request和response的变量
+							next是koa传入的将要处理的下一个异步函数
+						koa这个包怎么装，app.js才能正常导入它？
+							方法一：可以用npm命令直接安装koa
+								先打开命令提示符，务必把当前目录切换到hello-koa这个目录，然后执行命令
+									C:\...\hello-koa> npm install koa@2.0.0
+								npm会把koa2以及koa2依赖的所有包全部安装到当前目录的node_modules目录下
+							方法二：在hello-koa这个目录下创建一个package.json，这个文件描述了我们的hello-koa工程会用到哪些包
+								{
+									"name": "hello-koa2",
+									"version": "1.0.0",
+									"description": "Hello Koa 2 example with async",
+									"main": "start.js",
+									"scripts": {
+										"start": "node start.js"
+									},
+									"keywords": [
+										"koa",
+										"async"
+									],
+									"author": "Michael Liao",
+									"license": "Apache-2.0",
+									"repository": {
+										"type": "git",
+										"url": "https://github.com/michaelliao/learn-javascript.git"
+									},
+									"dependencies": {
+										"babel-core": "6.13.2",
+										"babel-polyfill": "6.13.0",
+										"babel-preset-es2015-node6": "0.3.0",
+										"babel-preset-stage-3": "6.5.0",
+										"koa": "2.0.0"
+									}
+								}
+								其中，dependencies描述了我们的工程依赖的包以及版本号。其他字段均用来描述项目信息，可任意填写
+								然后，我们在hello-koa目录下执行npm install就可以把所需包以及依赖包一次性全部装好：
+									C:\...\hello-koa> npm install
+							很显然，第二个方法更靠谱，因为我们只要在package.json正确设置了依赖，npm就会把所有用到的包都装好
+							注意，任何时候都可以直接删除整个node_modules目录，因为用npm install命令可以完整地重新下载所有依赖。并且，这个目录不应该被放入版本控制中
+					koa middleware
+						koa的执行逻辑，核心代码是
+							app.use(async (ctx, next) => {
+								await next();
+								ctx.response.type = 'text/html';
+								ctx.response.body = '<h1>Hello, koa2!</h1>';
+							});
+						每收到一个http请求，koa就会调用通过app.use()注册的async函数，并传入ctx和next参数
+						我们可以对ctx操作，并设置返回内容
+						为什么要调用await next()？
+							原因是koa把很多async函数组成一个处理链，每个async函数都可以做一些自己的事情，然后用await next()来调用下一个async函数
+							把每个async函数称为middleware，这些middleware可以组合起来，完成很多有用的功能。
+							例如，可以用以下3个middleware组成处理链，依次打印日志，记录处理时间，输出HTML
+								app.use(async (ctx, next) => {
+									console.log(`${ctx.request.method} ${ctx.request.url}`); // 打印URL
+									await next(); // 调用下一个middleware
+								});
+
+								app.use(async (ctx, next) => {
+									const start = new Date().getTime(); // 当前时间
+									await next(); // 调用下一个middleware
+									const ms = new Date().getTime() - start; // 耗费时间
+									console.log(`Time: ${ms}ms`); // 打印耗费时间
+								});
+
+								app.use(async (ctx, next) => {
+									await next();
+									ctx.response.type = 'text/html';
+									ctx.response.body = '<h1>Hello, koa2!</h1>';
+								});
+							middleware的顺序很重要，也就是调用app.use()的顺序决定了middleware的顺序
+							此外，如果一个middleware没有调用await next()，后续的middleware将不再执行了
+								例如，一个检测用户权限的middleware可以决定是否继续处理请求，还是直接返回403错误
+									app.use(async (ctx, next) => {
+										if (await checkUserPermission(ctx)) {
+											await next();
+										} else {
+											ctx.response.status = 403;
+										}
+									});
+				处理URL
+					在hello-koa工程中，我们处理http请求一律返回相同的HTML，这样虽然非常简单，但是随便输入任何URL都会返回相同的网页
+					正常情况下，我们应该对不同的URL调用不同的处理函数，这样才能返回不同的结果
+						app.use(async (ctx, next) => {
+							if (ctx.request.path === '/') {
+								ctx.response.body = 'index page';
+							} else {
+								await next();
+							}
+						});
+
+						app.use(async (ctx, next) => {
+							if (ctx.request.path === '/test') {
+								ctx.response.body = 'TEST page';
+							} else {
+								await next();
+							}
+						});
+
+						app.use(async (ctx, next) => {
+							if (ctx.request.path === '/error') {
+								ctx.response.body = 'ERROR page';
+							} else {
+								await next();
+							}
+						});
+					有一个能集中处理URL的middleware，它根据不同的URL调用不同的处理函数，这样，我们才能专心为每个URL编写处理函数
+					koa-router
+						为了处理URL，我们需要引入koa-router这个middleware，让它负责处理URL映射
+						首先创建工程url-koa，在package.json中添加依赖项：
+							"koa-router": "7.0.0"
+						然后用npm install安装
+						接下来，我们修改app.js，使用koa-router来处理URL
+							const Koa = require('koa');
+							// 注意require('koa-router')返回的是函数:
+							const router = require('koa-router')();
+
+							const app = new Koa();
+
+							// log request URL:
+							app.use(async (ctx, next) => {
+								console.log(`Process ${ctx.request.method} ${ctx.request.url}...`);
+								await next();
+							});
+
+							// add url-route:
+							router.get('/hello/:name', async (ctx, next) => {
+								var name = ctx.params.name;
+								ctx.response.body = `<h1>Hello, ${name}!</h1>`;
+							});
+
+							router.get('/', async (ctx, next) => {
+								ctx.response.body = '<h1>Index</h1>';
+							});
+
+							// add router middleware:
+							app.use(router.routes());
+
+							app.listen(3000);
+							console.log('app started at port 3000...');
+						再运行start.js，我们就可以测试不同的URL
+							输入首页：http://localhost:3000/
+							输入：http://localhost:3000/hello/koa
+					处理post请求
+						要处理post请求，可以用router.post('/path', async fn)
+						用post请求处理URL时，我们会遇到一个问题：post请求通常会发送一个表单，或者JSON
+						它作为request的body发送，但无论是Node.js提供的原始request对象，还是koa提供的request对象，都不提供解析request的body的功能
+						所以，需要引入另一个middleware来解析原始request请求，然后，把解析后的参数，绑定到ctx.request.body中
+							koa-bodyparser就是用来干这个活的
+							首先，在package.json中添加依赖项：
+								"koa-bodyparser": "3.2.0"
+							然后使用npm install安装
+							再修改app.js，引入koa-bodyparser
+								const bodyParser = require('koa-bodyparser');
+								在合适的位置加上：
+									app.use(bodyParser());
+								由于middleware的顺序很重要，这个koa-bodyparser必须在router之前被注册到app对象上
+							写一个简单的登录表单
+								router.get('/', async (ctx, next) => {
+									ctx.response.body = `<h1>Index</h1>
+										<form action="/signin" method="post">
+											<p>Name: <input name="name" value="koa"></p>
+											<p>Password: <input name="password" type="password"></p>
+											<p><input type="submit" value="Submit"></p>
+										</form>`;
+								});
+
+								router.post('/signin', async (ctx, next) => {
+									var
+										name = ctx.request.body.name || '',
+										password = ctx.request.body.password || '';
+									console.log(`signin with name: ${name}, password: ${password}`);
+									if (name === 'koa' && password === '12345') {
+										ctx.response.body = `<h1>Welcome, ${name}!</h1>`;
+									} else {
+										ctx.response.body = `<h1>Login failed!</h1>
+										<p><a href="/">Try again</a></p>`;
+									}
+								});
+					重构
+						所有的URL处理函数都放到app.js里显得很乱，而且，每加一个URL，就需要修改app.js
+						随着URL越来越多，app.js就会越来越长
+						如果能把URL处理函数集中到某个js文件，或者某几个js文件中就好了，然后让app.js自动导入所有处理URL的函数
+						这样，代码一分离，逻辑就显得清楚了
+							url2-koa/
+							|
+							+- .vscode/
+							|  |
+							|  +- launch.json <-- VSCode 配置文件
+							|
+							+- controllers/
+							|  |
+							|  +- login.js <-- 处理login相关URL
+							|  |
+							|  +- users.js <-- 处理用户管理相关URL
+							|
+							+- app.js <-- 使用koa的js
+							|
+							+- start.js <-- 启动入口js
+							|
+							+- package.json <-- 项目描述文件
+							|
+							+- node_modules/ <-- npm安装的所有依赖包
+						首先，们把url-koa复制一份，重命名为url2-koa，准备重构这个项目
+						然后，在controllers目录下编写index.js
+							var fn_index = async (ctx, next) => {
+								ctx.response.body = `<h1>Index</h1>
+									<form action="/signin" method="post">
+										<p>Name: <input name="name" value="koa"></p>
+										<p>Password: <input name="password" type="password"></p>
+										<p><input type="submit" value="Submit"></p>
+									</form>`;
+							};
+
+							var fn_signin = async (ctx, next) => {
+								var
+									name = ctx.request.body.name || '',
+									password = ctx.request.body.password || '';
+								console.log(`signin with name: ${name}, password: ${password}`);
+								if (name === 'koa' && password === '12345') {
+									ctx.response.body = `<h1>Welcome, ${name}!</h1>`;
+								} else {
+									ctx.response.body = `<h1>Login failed!</h1>
+									<p><a href="/">Try again</a></p>`;
+								}
+							};
+
+							module.exports = {
+								'GET /': fn_index,
+								'POST /signin': fn_signin
+							};
+						类似的，hello.js把一个URL处理函数暴露出来
+							var fn_hello = async (ctx, next) => {
+								var name = ctx.params.name;
+								ctx.response.body = `<h1>Hello, ${name}!</h1>`;
+							};
+
+							module.exports = {
+								'GET /hello/:name': fn_hello
+							};
+						现在，修改app.js，让它自动扫描controllers目录，找到所有js文件，导入，然后注册每个URL
+							// 先导入fs模块，然后用readdirSync列出文件
+							// 这里可以用sync是因为启动时只运行一次，不存在性能问题:
+							var files = fs.readdirSync(__dirname + '/controllers');
+
+							// 过滤出.js文件:
+							var js_files = files.filter((f)=>{
+								return f.endsWith('.js');
+							});
+
+							// 处理每个js文件:
+							for (var f of js_files) {
+								console.log(`process controller: ${f}...`);
+								// 导入js文件:
+								let mapping = require(__dirname + '/controllers/' + f);
+								for (var url in mapping) {
+									if (url.startsWith('GET ')) {
+										// 如果url类似"GET xxx":
+										var path = url.substring(4);
+										router.get(path, mapping[url]);
+										console.log(`register URL mapping: GET ${path}`);
+									} else if (url.startsWith('POST ')) {
+										// 如果url类似"GET xxx":
+										var path = url.substring(5);
+										router.post(path, mapping[url]);
+										console.log(`register URL mapping: POST ${path}`);
+									} else {
+										// 无效的URL:
+										console.log(`invalid URL: ${url}`);
+									}
+								}
+							}
+						如果上面的大段代码看起来还是有点费劲，那就把它拆成更小单元的函数
+							function addMapping(router, mapping) {
+								for (var url in mapping) {
+									if (url.startsWith('GET ')) {
+										var path = url.substring(4);
+										router.get(path, mapping[url]);
+										console.log(`register URL mapping: GET ${path}`);
+									} else if (url.startsWith('POST ')) {
+										var path = url.substring(5);
+										router.post(path, mapping[url]);
+										console.log(`register URL mapping: POST ${path}`);
+									} else {
+										console.log(`invalid URL: ${url}`);
+									}
+								}
+							}
+
+							function addControllers(router) {
+								var files = fs.readdirSync(__dirname + '/controllers');
+								var js_files = files.filter((f) => {
+									return f.endsWith('.js');
+								});
+
+								for (var f of js_files) {
+									console.log(`process controller: ${f}...`);
+									let mapping = require(__dirname + '/controllers/' + f);
+									addMapping(router, mapping);
+								}
+							}
+
+							addControllers(router);
+							
+							确保每个函数功能非常简单，一眼能看明白，是代码可维护的关键。
+						最后，我们把扫描controllers目录和创建router的代码从app.js中提取出来，作为一个简单的middleware使用，命名为controller.js
+							const fs = require('fs');
+
+							function addMapping(router, mapping) {
+								...
+							}
+
+							function addControllers(router, dir) {
+								...
+							}
+
+							module.exports = function (dir) {
+								let
+									controllers_dir = dir || 'controllers', // 如果不传参数，扫描目录默认为'controllers'
+									router = require('koa-router')();
+								addControllers(router, controllers_dir);
+								return router.routes();
+							};
+						这样一来，我们在app.js的代码又简化了
+							...
+							// 导入controller middleware:
+							const controller = require('./controller');
+							...
+							// 使用middleware:
+							app.use(controller());
+							...
+						经过重新整理后的工程url2-koa目前具备非常好的模块化，所有处理URL的函数按功能组存放在controllers目录，今后我们也只需要不断往这个目录下加东西就可以了，app.js保持不变
+				模板引擎Nunjucks
+					那什么是模板引擎？
+						模板引擎就是基于模板配合数据构造出字符串输出的一个组件
+							比如下面的函数就是一个模板引擎
+								function examResult (data) {
+									return `${data.name}同学一年级期末考试语文${data.chinese}分，数学${data.math}分，位于年级第${data.ranking}名。`
+								}
+							如果我们输入数据如下：
+								examResult({
+									name: '小明',
+									chinese: 78,
+									math: 87,
+									ranking: 999
+								});
+							该模板引擎把模板字符串里面对应的变量替换以后，就可以得到以下输出
+								小明同学一年级期末考试语文78分，数学87分，位于年级第999名。
+						模板引擎最常见的输出就是输出网页，也就是HTML文本
+						当然，也可以输出任意格式的文本，比如Text，XML，Markdown等等
+						JavaScript的模板字符串可以实现模板功能，那为什么我们还需要另外的模板引擎？
+							因为JavaScript的模板字符串必须写在JavaScript代码中，要想写出新浪首页这样复杂的页面，是非常困难的。
+							输出HTML有几个特别重要的问题需要考虑
+								转义
+									对特殊字符要转义，避免受到XSS攻击
+										比如，如果变量name的值不是小明，而是小明<script>...</script>，模板引擎输出的HTML到了浏览器，就会自动执行恶意JavaScript代码
+								格式化
+									对不同类型的变量要格式化
+										比如，货币需要变成12,345.00这样的格式，日期需要变成2016-01-01这样的格式
+								简单逻辑
+									模板还需要能执行一些简单逻辑
+										比如，要按条件输出内容，需要if实现如下输出
+											{{ name }}同学，
+											{% if score >= 90 %}
+												成绩优秀，应该奖励
+											{% elif score >=60 %}
+												成绩良好，继续努力
+											{% else %}
+												不及格，建议回家打屁股
+											{% endif %}
+					Nunjucks
+						Nunjucks是Mozilla开发的一个纯JavaScript编写的模板引擎
+						既可以用在Node环境下，又可以运行在浏览器端
+						但是，主要还是运行在Node环境下，因为浏览器端有更好的模板解决方案，例如MVVM框架
+						如果使用过Python的模板引擎jinja2，那么使用Nunjucks就非常简单，两者的语法几乎是一模一样的，因为Nunjucks就是用JavaScript重新实现了jinjia2
+						虽然模板引擎内部可能非常复杂，但是使用一个模板引擎是非常简单的
+							function render(view, model) {
+								// TODO:...
+							}
+							其中，view是模板的名称（又称为视图），因为可能存在多个模板，需要选择其中一个。
+							model就是数据，在JavaScript中，它就是一个简单的Object。
+							render函数返回一个字符串，就是模板的输出。
+						使用Nunjucks这个模板引擎来编写几个HTML模板，并且用实际数据来渲染模板并获得最终的HTML输出
+							首先，创建一个use-nunjucks的VS Code工程结构如下
+								use-nunjucks/
+								|
+								+- .vscode/
+								|  |
+								|  +- launch.json <-- VSCode 配置文件
+								|
+								+- views/
+								|  |
+								|  +- hello.html <-- HTML模板文件
+								|
+								+- app.js <-- 入口js
+								|
+								+- package.json <-- 项目描述文件
+								|
+								+- node_modules/ <-- npm安装的所有依赖包
+								
+								其中，模板文件存放在views目录中
+							然后，在package.json中添加nunjucks的依赖：
+								"nunjucks": "2.4.2"
+							用npm install安装所有依赖包
+							紧接着，我们要编写使用Nunjucks的函数render
+								在app.js中编写代码如下
+									const nunjucks = require('nunjucks');
+									function createEnv(path, opts) {
+										var
+											autoescape = opts.autoescape && true,
+											noCache = opts.noCache || false,
+											watch = opts.watch || false,
+											throwOnUndefined = opts.throwOnUndefined || false,
+											env = new nunjucks.Environment(
+												new nunjucks.FileSystemLoader('views', {
+													noCache: noCache,
+													watch: watch,
+												}), {
+													autoescape: autoescape,
+													throwOnUndefined: throwOnUndefined
+												});
+										if (opts.filters) {
+											for (var f in opts.filters) {
+												env.addFilter(f, opts.filters[f]);
+											}
+										}
+										return env;
+									}
+
+									var env = createEnv('views', {
+										watch: true,
+										filters: {
+											hex: function (n) {
+												return '0x' + n.toString(16);
+											}
+										}
+									});
+							编写一个hello.html模板文件，放到views目录下，内容如下
+								<h1>Hello {{ name }}</h1>
+							然后，可以用下面的代码来渲染这个模板：
+								var s = env.render('hello.html', { name: '小明' });
+								console.log(s);
+							获得输出如下
+								<h1>Hello 小明</h1>
+							用下面代码测试
+								var s = env.render('hello.html', { name: '<script>alert("小明")</script>' });
+								console.log(s);
+							获得输出如下
+								<h1>Hello &lt;script&gt;alert("小明")&lt;/script&gt;</h1>
+								
+								这样就避免了输出恶意脚本
+						此外，可以使用Nunjucks提供的功能强大的tag，编写条件判断、循环等功能
+							例如
+								<!-- 循环输出名字 -->
+								<body>
+									<h3>Fruits List</h3>
+									{% for f in fruits %}
+									<p>{{ f }}</p>
+									{% endfor %}
+								</body>
+							Nunjucks模板引擎最强大的功能在于模板的继承
+								仔细观察各种网站可以发现，网站的结构实际上是类似的，头部、尾部都是固定格式，只有中间页面部分内容不同
+								如果每个模板都重复头尾，一旦要修改头部或尾部，那就需要改动所有模板
+								更好的方式是使用继承。先定义一个基本的网页框架base.html
+									<html><body>
+									{% block header %} <h3>Unnamed</h3> {% endblock %}
+									{% block body %} <div>No body</div> {% endblock %}
+									{% block footer %} <div>copyright</div> {% endblock %}
+									</body>
+									
+									base.html定义了三个可编辑的块，分别命名为header、body和footer
+								子模板可以有选择地对块进行重新定义：
+									{% extends 'base.html' %}
+
+									{% block header %}<h1>{{ header }}</h1>{% endblock %}
+
+									{% block body %}<p>{{ body }}</p>{% endblock %}
+								然后，对子模板进行渲染
+									console.log(env.render('extend.html', {
+										header: 'Hello',
+										body: 'bla bla bla...'
+									}));
+								输出HTML如下
+									<html><body>
+									<h1>Hello</h1>
+									<p>bla bla bla...</p>
+									<div>copyright</div> <-- footer没有重定义，所以仍使用父模板的内容
+									</body>
+						性能
+							对于模板渲染本身来说，速度是非常非常快的，因为就是拼字符串，纯CPU操作
+							性能问题主要出现在从文件读取模板内容这一步。这是一个IO操作
+							在Node.js环境中，我们知道，单线程的JavaScript最不能忍受的就是同步IO，但Nunjucks默认就使用同步IO读取模板文件
+							好消息是Nunjucks会缓存已读取的文件内容，也就是说，模板文件最多读取一次，就会放在内存中，后面的请求是不会再次读取文件的，只要我们指定了noCache: false这个参数
+							在开发环境下，可以关闭cache，这样每次重新加载模板，便于实时修改模板。在生产环境下，一定要打开cache，这样就不会有性能问题
+							Nunjucks也提供了异步读取的方式，但是这样写起来很麻烦，有简单的写法我们就不会考虑复杂的写法。保持代码简单是可维护性的关键
+				MVC
+					可以用koa处理不同的URL，还可以用Nunjucks渲染模板。现在，是时候把这两者结合起来了
+						当用户通过浏览器请求一个URL时，koa将调用某个异步函数处理该URL
+						在这个异步函数内部，我们用一行代码：
+							ctx.render('home.html', { name: 'Michael' });
+						通过Nunjucks把数据用指定的模板渲染成HTML，然后输出给浏览器，用户就可以看到渲染后的页面了
+					MVC：Model-View-Controller，中文名“模型-视图-控制器”
+						异步函数是C
+							Controller，Controller负责业务逻辑，比如检查用户名是否存在，取出用户信息等等
+						包含变量{{ name }}的模板就是V
+							View，View负责显示逻辑，通过简单地替换一些变量，View最终输出的就是用户看到的HTML
+						一个JavaScript对象：{ name: 'Michael' }是M
+							Model是用来传给View的，这样View在替换变量的时候，就可以从Model中取出相应的数据
+					整合koa2、Nunjucks
+						首先，创建工程view-koa
+							view-koa/
+							|
+							+- .vscode/
+							|  |
+							|  +- launch.json <-- VSCode 配置文件
+							|
+							+- controllers/ <-- Controller
+							|
+							+- views/ <-- html模板文件
+							|
+							+- static/ <-- 静态资源文件
+							|
+							+- controller.js <-- 扫描注册Controller
+							|
+							+- app.js <-- 使用koa的js
+							|
+							+- start.js <-- 启动入口js
+							|
+							+- package.json <-- 项目描述文件
+							|
+							+- node_modules/ <-- npm安装的所有依赖包
+						在package.json中，用到的依赖包有：
+							"babel-core": "6.13.2",
+							"babel-polyfill": "6.13.0",
+							"babel-preset-es2015-node6": "0.3.0",
+							"babel-preset-stage-3": "6.5.0",
+							"koa": "2.0.0",
+							"koa-bodyparser": "3.2.0",
+							"koa-router": "7.0.0",
+							"nunjucks": "2.4.2",
+							"mime": "1.3.4",
+							"mz": "2.4.0"
+						用npm install安装依赖包
+						然后，我们准备编写以下两个Controller
+							处理首页 GET /
+								定义一个async函数处理首页URL/：
+									async (ctx, next) => {
+										ctx.render('index.html', {
+											title: 'Welcome'
+										});
+									}
+							处理登录请求 POST /signin
+								再定义一个async函数处理登录请求/signin：
+									async (ctx, next) => {
+										var
+											email = ctx.request.body.email || '',
+											password = ctx.request.body.password || '';
+										if (email === 'admin@example.com' && password === '123456') {
+											// 登录成功:
+											ctx.render('signin-ok.html', {
+												title: 'Sign In OK',
+												name: 'Mr Node'
+											});
+										} else {
+											// 登录失败:
+											ctx.render('signin-failed.html', {
+												title: 'Sign In Failed'
+											});
+										}
+									}
+						登录成功时用signin-ok.html渲染，登录失败时我们用signin-failed.html渲染
+						所以，我们一共需要以下3个View：
+							index.html
+							signin-ok.html
+							signin-failed.html
+						编写View
+							实际上是在编写HTML页。为了让页面看起来美观大方，使用一个现成的CSS框架是非常有必要的。我们用Bootstrap这个CSS框架
+							从首页下载zip包后解压，我们把所有静态资源文件放到/static目录下
+								view-koa/
+								|
+								+- static/
+								   |
+								   +- css/ <- 存放bootstrap.css等
+								   |
+								   +- fonts/ <- 存放字体文件
+								   |
+								   +- js/ <- 存放bootstrap.js等
+							这样在编写HTML的时候，可以直接用Bootstrap的CSS
+								<link rel="stylesheet" href="/static/css/bootstrap.css">
+						如何处理静态文件？
+							在koa中，我们需要编写一个middleware，处理以/static/开头的URL
+						编写middleware
+							创建一个static-files.js的文件，编写一个能处理静态文件的middleware
+								const path = require('path');
+								const mime = require('mime');
+								const fs = require('mz/fs');
+
+								// url: 类似 '/static/'
+								// dir: 类似 __dirname + '/static'
+								function staticFiles(url, dir) {
+									return async (ctx, next) => {
+										let rpath = ctx.request.path;
+										// 判断是否以指定的url开头:
+										if (rpath.startsWith(url)) {
+											// 获取文件完整路径:
+											let fp = path.join(dir, rpath.substring(url.length));
+											// 判断文件是否存在:
+											if (await fs.exists(fp)) {
+												// 查找文件的mime:
+												ctx.response.type = mime.lookup(rpath);
+												// 读取文件内容并赋值给response.body:
+												ctx.response.body = await fs.readFile(fp);
+											} else {
+												// 文件不存在:
+												ctx.response.status = 404;
+											}
+										} else {
+											// 不是指定前缀的URL，继续处理下一个middleware:
+											await next();
+										}
+									};
+								}
+
+								module.exports = staticFiles;
+								
+								使用了一个mz的包，并通过require('mz/fs');导入
+								mz提供的API和Node.js的fs模块完全相同，但fs模块使用回调
+								而mz封装了fs对应的函数，并改为Promise。这样，我们就可以非常简单的用await调用mz的函数，而不需要任何回调
+							使用middleware也很简单，在app.js里加一行代码
+								let staticFiles = require('./static-files');
+								app.use(staticFiles('/static/', __dirname + '/static'));
+						集成Nunjucks
+							集成Nunjucks实际上也是编写一个middleware
+							这个middleware的作用是给ctx对象绑定一个render(view, model)的方法
+							这样，后面的Controller就可以调用这个方法来渲染模板
+							创建一个templating.js来实现这个middleware
+								const nunjucks = require('nunjucks');
+
+								function createEnv(path, opts) {
+									var
+										autoescape = opts.autoescape && true,
+										noCache = opts.noCache || false,
+										watch = opts.watch || false,
+										throwOnUndefined = opts.throwOnUndefined || false,
+										env = new nunjucks.Environment(
+											new nunjucks.FileSystemLoader('views', {
+												noCache: noCache,
+												watch: watch,
+											}), {
+												autoescape: autoescape,
+												throwOnUndefined: throwOnUndefined
+											});
+									if (opts.filters) {
+										for (var f in opts.filters) {
+											env.addFilter(f, opts.filters[f]);
+										}
+									}
+									return env;
+								}
+
+								function templating(path, opts) {
+									// 创建Nunjucks的env对象:
+									var env = createEnv(path, opts);
+									return async (ctx, next) => {
+										// 给ctx绑定render函数:
+										ctx.render = function (view, model) {
+											// 把render后的内容赋值给response.body:
+											ctx.response.body = env.render(view, Object.assign({}, ctx.state || {}, model || {}));
+											// 设置Content-Type:
+											ctx.response.type = 'text/html';
+										};
+										// 继续处理请求:
+										await next();
+									};
+								}
+
+								module.exports = templating;
+							使用middleware，我们在app.js添加如下代码
+								const isProduction = process.env.NODE_ENV === 'production';
+
+								app.use(templating('view', {
+									noCache: !isProduction,
+									watch: !isProduction
+								}));
+								
+								这里定义了一个常量isProduction，它判断当前环境是否是production环境
+									如果是，就使用缓存
+									如果不是，就关闭缓存
+								在开发环境下，关闭缓存后，我们修改View，可以直接刷新浏览器看到效果
+								否则，每次修改都必须重启Node程序，会极大地降低开发效率
+								Node.js在全局变量process中定义了一个环境变量env.NODE_ENV，为什么要使用该环境变量？
+									因为我们在开发的时候，环境变量应该设置为'development'，而部署到服务器时，环境变量应该设置为'production'。
+									在编写代码的时候，要根据当前环境作不同的判断。
+								注意：生产环境上必须配置环境变量NODE_ENV = 'production'，而开发环境不需要配置，实际上NODE_ENV可能是undefined，所以判断的时候，不要用NODE_ENV === 'development'。
+						编写View
+							在编写View的时候，非常有必要先编写一个base.html作为骨架，其他模板都继承自base.html，这样，才能大大减少重复工作
+						运行
+							运行前，我们再检查一下app.js里的middleware的顺序
+								第一个middleware是记录URL以及页面执行时间
+									app.use(async (ctx, next) => {
+										console.log(`Process ${ctx.request.method} ${ctx.request.url}...`);
+										var
+											start = new Date().getTime(),
+											execTime;
+										await next();
+										execTime = new Date().getTime() - start;
+										ctx.response.set('X-Response-Time', `${execTime}ms`);
+									});
+								第二个middleware处理静态文件
+									if (! isProduction) {
+										let staticFiles = require('./static-files');
+										app.use(staticFiles('/static/', __dirname + '/static'));
+									}
+								第三个middleware解析POST请求
+									app.use(bodyParser());
+								第四个middleware负责给ctx加上render()来使用Nunjucks
+									app.use(templating('view', {
+										noCache: !isProduction,
+										watch: !isProduction
+									}));
+								最后一个middleware处理URL路由
+									app.use(controller());
+						扩展
+							注意到ctx.render内部渲染模板时，Model对象并不是传入的model变量
+							而是：
+								Object.assign({}, ctx.state || {}, model || {})
+							这个小技巧是为了扩展。
+								model || {}确保了即使传入undefined，model也会变为默认值{}
+								Object.assign()会把除第一个参数外的其他参数的所有属性复制到第一个参数中
+								第二个参数是ctx.state || {}，这个目的是为了能把一些公共的变量放入ctx.state并传给View
+								例如，某个middleware负责检查用户权限，它可以把当前用户放入ctx.state中
+									app.use(async (ctx, next) => {
+										var user = tryGetUserFromCookie(ctx.request);
+										if (user) {
+											ctx.state.user = user;
+											await next();
+										} else {
+											ctx.response.status = 403;
+										}
+									});
+									这样就没有必要在每个Controller的async函数中都把user变量放入model中
+			mysql
+				程序运行的时候，数据都是在内存中的
+				当程序终止的时候，通常都需要将数据保存到磁盘上，无论是保存到本地磁盘，还是通过网络保存到服务器上，最终都会将数据写入磁盘文件
+				为了便于程序保存和读取数据，而且，能直接通过条件快速查询到指定的数据，就出现了数据库（Database）这种专门用于集中存储和查询的软件
+				MySQL
+					登录MySQL
+						mysql -u root -p
+					查看数据库编码
+						show variables like '%char%';
+				使用Sequelize
+					当我们安装好MySQL后，Node.js程序如何访问MySQL数据库呢？
+						访问MySQL数据库只有一种方法，就是通过网络发送SQL命令，然后，MySQL服务器执行后返回结果。
+					对于Node.js程序，访问MySQL也是通过网络发送SQL命令给MySQL服务器
+					这个访问MySQL服务器的软件包通常称为MySQL驱动程序
+					不同的编程语言需要实现自己的驱动，MySQL官方提供了Java、.Net、Python、Node.js、C++和C的驱动程序，官方的Node.js驱动目前仅支持5.7以上版本，而我们上面使用的命令行程序实际上用的就是C驱动
+					目前使用最广泛的MySQL Node.js驱动程序是开源的mysql，可以直接使用npm安装
+					ORM
+						如果直接使用mysql包提供的接口，我们编写的代码就比较底层
+							例如，查询代码
+								connection.query('SELECT * FROM users WHERE id = ?', ['123'], function(err, rows) {
+									if (err) {
+										// error
+									} else {
+										for (let row in rows) {
+											processRow(row);
+										}
+									}
+								});
+						考虑到数据库表是一个二维表，包含多行多列，例如一个pets的表
+							例如一个pets的表
+								mysql> select * from pets;
+								+----+--------+------------+
+								| id | name   | birth      |
+								+----+--------+------------+
+								|  1 | Gaffey | 2007-07-07 |
+								|  2 | Odie   | 2008-08-08 |
+								+----+--------+------------+
+								2 rows in set (0.00 sec)
+							每一行可以用一个JavaScript对象表示，例如第一行：
+								{
+									"id": 1,
+									"name": "Gaffey",
+									"birth": "2007-07-07"
+								}
+						这就是ORM技术：Object-Relational Mapping，把关系数据库的表结构映射到对象上。
+						但是由谁来做这个转换呢？所以ORM框架应运而生
+						选择Node的ORM框架Sequelize来操作数据库。这样，我们读写的都是JavaScript对象，Sequelize帮我们把对象变成数据库中的行
+						用Sequelize查询pets表，代码像这样
+							Pet.findAll()
+							   .then(function (pets) {
+								   for (let pet in pets) {
+									   console.log(`${pet.id}: ${pet.name}`);
+								   }
+							   }).catch(function (err) {
+								   // error
+							   });
+						因为Sequelize返回的对象是Promise，所以我们可以用then()和catch()分别异步响应成功和失败
+						但是用then()和catch()仍然比较麻烦。有没有更简单的方法呢？
+							可以用ES7的await来调用任何一个Promise对象
+								var pets = await Pet.findAll();
+							await只有一个限制，就是必须在async函数中调用。
+								上面的代码可以改成
+									(async () => {
+										var pets = await Pet.findAll();
+									})();
+						考虑到koa的处理函数都是async函数，所以我们实际上将来在koa的async函数中直接写await访问数据库就可以
+					选择Sequelize的原因：只要API返回Promise，就可以用await调用，写代码就非常简单
+					实战
+						先在MySQL中创建一个表来测试。我们可以在test数据库中创建一个pets表
+						在MySQL命令行执行下列命令：
+
+							grant all privileges on test.* to 'www'@'%' identified by 'www';
+
+							use test;
+
+							create table pets (
+								id varchar(50) not null,
+								name varchar(100) not null,
+								gender bool not null,
+								birth varchar(10) not null,
+								createdAt bigint not null,
+								updatedAt bigint not null,
+								version bigint not null,
+								primary key (id)
+							) engine=innodb;
+							第一条grant命令是创建MySQL的用户名和口令，均为www，并赋予操作test数据库的所有权限。
+							第二条use命令把当前数据库切换为test。
+							第三条命令创建了pets表。
+						然后，我们根据前面的工程结构创建hello-sequelize工程，结构如下
+							hello-sequelize/
+							|
+							+- .vscode/
+							|  |
+							|  +- launch.json <-- VSCode 配置文件
+							|
+							+- init.txt <-- 初始化SQL命令
+							|
+							+- config.js <-- MySQL配置文件
+							|
+							+- app.js <-- 使用koa的js
+							|
+							+- start.js <-- 启动入口js
+							|
+							+- package.json <-- 项目描述文件
+							|
+							+- node_modules/ <-- npm安装的所有依赖包
+						然后，添加如下依赖包：
+							"babel-core": "6.13.2",
+							"babel-polyfill": "6.13.0",
+							"babel-preset-es2015-node6": "0.3.0",
+							"babel-preset-stage-3": "6.5.0",
+							"sequelize": "3.24.1",
+							"mysql": "2.11.1"
+							
+							注意mysql是驱动，我们不直接使用，但是sequelize会用
+							用npm install安装
+						config.js实际上是一个简单的配置文件
+							var config = {
+								database: 'test', // 使用哪个数据库
+								username: 'www', // 用户名
+								password: 'www', // 口令
+								host: 'localhost', // 主机名
+								port: 3306 // 端口号，MySQL默认3306
+							};
+
+							module.exports = config;
+						在app.js中操作数据库
+							使用Sequelize操作MySQL需要先做两件准备工作
+								第一步，创建一个sequelize对象实例
+									const Sequelize = require('sequelize');
+									const config = require('./config');
+
+									var sequelize = new Sequelize(config.database, config.username, config.password, {
+										host: config.host,
+										dialect: 'mysql',
+										pool: {
+											max: 5,
+											min: 0,
+											idle: 30000
+										}
+									});
+								第二步，定义模型Pet，告诉Sequelize如何映射数据库表
+									var Pet = sequelize.define('pet', {
+										id: {
+											type: Sequelize.STRING(50),
+											primaryKey: true
+										},
+										name: Sequelize.STRING(100),
+										gender: Sequelize.BOOLEAN,
+										birth: Sequelize.STRING(10),
+										createdAt: Sequelize.BIGINT,
+										updatedAt: Sequelize.BIGINT,
+										version: Sequelize.BIGINT
+									}, {
+											timestamps: false
+										});
+										
+									用sequelize.define()定义Model时
+										第一个参数传入名称pet，默认的表名就是pets
+										第二个参数指定列名和数据类型，如果是主键，需要更详细地指定。
+										第三个参数是额外的配置，我们传入{ timestamps: false }是为了关闭Sequelize的自动添加timestamp的功能
+							往数据库中塞一些数据了。
+								用Promise的方式写
+									var now = Date.now();
+
+									Pet.create({
+										id: 'g-' + now,
+										name: 'Gaffey',
+										gender: false,
+										birth: '2007-07-07',
+										createdAt: now,
+										updatedAt: now,
+										version: 0
+									}).then(function (p) {
+										console.log('created.' + JSON.stringify(p));
+									}).catch(function (err) {
+										console.log('failed: ' + err);
+									});
+								也可以用await写
+									(async () => {
+										var dog = await Pet.create({
+											id: 'd-' + now,
+											name: 'Odie',
+											gender: false,
+											birth: '2008-08-08',
+											createdAt: now,
+											updatedAt: now,
+											version: 0
+										});
+										console.log('created: ' + JSON.stringify(dog));
+									})();
+							查询数据时，用await写法如下
+								(async () => {
+									var pets = await Pet.findAll({
+										where: {
+											name: 'Gaffey'
+										}
+									});
+									console.log(`find ${pets.length} pets:`);
+									for (let p of pets) {
+										console.log(JSON.stringify(p));
+									}
+								})();
+							如果要更新数据，可以对查询到的实例调用save()方法
+								(async () => {
+									var p = await queryFromSomewhere();
+									p.gender = true;
+									p.updatedAt = Date.now();
+									p.version ++;
+									await p.save();
+								})();
+							如果要删除数据，可以对查询到的实例调用destroy()方法
+								(async () => {
+									var p = await queryFromSomewhere();
+									await p.destroy();
+								})();
+							运行代码，可以看到Sequelize打印出的每一个SQL语句
+								Executing (default): INSERT INTO `pets` (`id`,`name`,`gender`,`birth`,`createdAt`,`updatedAt`,`version`) VALUES ('g-1471961204219','Gaffey',false,'2007-07-07',1471961204219,1471961204219,0);
+					Model
+						把通过sequelize.define()返回的Pet称为Model，它表示一个数据模型
+						把通过Pet.findAll()返回的一个或一组对象称为Model实例
+							每个实例都可以直接通过JSON.stringify序列化为JSON字符串
+							但是它们和普通JSON对象相比，多了一些由Sequelize添加的方法，比如save()和destroy()。调用这些方法我们可以执行更新或者删除操作
+						使用Sequelize操作数据库的一般步骤就是：
+							首先，通过某个Model对象的findAll()方法获取实例；
+							如果要更新实例，先对实例属性赋新值，再调用save()方法；
+
+							如果要删除实例，直接调用destroy()方法。
+
+							注意findAll()方法可以接收where、order这些参数，这和将要生成的SQL语句是对应的
+				建立Model
+					直接使用Sequelize虽然可以，但是存在一些问题
+					团队开发时，有人喜欢自己加timestamp：
+						var Pet = sequelize.define('pet', {
+							id: {
+								type: Sequelize.STRING(50),
+								primaryKey: true
+							},
+							name: Sequelize.STRING(100),
+							createdAt: Sequelize.BIGINT,
+							updatedAt: Sequelize.BIGINT
+						}, {
+								timestamps: false
+							});
+					有人又喜欢自增主键，并且自定义表名：
+						var Pet = sequelize.define('pet', {
+							id: {
+								type: Sequelize.INTEGER,
+								autoIncrement: true,
+								primaryKey: true
+							},
+							name: Sequelize.STRING(100)
+						}, {
+								tableName: 't_pet'
+							});
+					所以需要一个统一的模型，强迫所有Model都遵守同一个规范，这样不但实现简单，而且容易统一风格。
+					Model
+						首先要定义的就是Model存放的文件夹必须在models内，并且以Model名字命名，例如：Pet.js，User.js等等
+						其次，每个Model必须遵守一套规范
+							统一主键，名称必须是id，类型必须是STRING(50)；
+							主键可以自己指定，也可以由框架自动生成（如果为null或undefined）；
+							所有字段默认为NOT NULL，除非显式指定；
+							统一timestamp机制，每个Model必须有createdAt、updatedAt和version，分别记录创建时间、修改时间和版本号。其中，createdAt和updatedAt以BIGINT存储时间戳，最大的好处是无需处理时区，排序方便。version每次修改时自增。
+						所以，不要直接使用Sequelize的API，而是通过db.js间接地定义Model
+							例如，User.js应该定义如下
+								const db = require('../db');
+								module.exports = db.defineModel('users', {
+									email: {
+										type: db.STRING(100),
+										unique: true
+									},
+									passwd: db.STRING(100),
+									name: db.STRING(100),
+									gender: db.BOOLEAN
+								});
+								
+								这样，User就具有email、passwd、name和gender这4个业务字段
+								id、createdAt、updatedAt和version应该自动加上，而不是每个Model都去重复定义
+							所以，db.js的作用就是统一Model的定义
+								const Sequelize = require('sequelize');
+								console.log('init sequelize...');
+
+								var sequelize = new Sequelize('dbname', 'username', 'password', {
+									host: 'localhost',
+									dialect: 'mysql',
+									pool: {
+										max: 5,
+										min: 0,
+										idle: 10000
+									}
+								});
+
+								const ID_TYPE = Sequelize.STRING(50);
+
+								function defineModel(name, attributes) {
+									var attrs = {};
+									for (let key in attributes) {
+										let value = attributes[key];
+										if (typeof value === 'object' && value['type']) {
+											value.allowNull = value.allowNull || false;
+											attrs[key] = value;
+										} else {
+											attrs[key] = {
+												type: value,
+												allowNull: false
+											};
+										}
+									}
+									attrs.id = {
+										type: ID_TYPE,
+										primaryKey: true
+									};
+									attrs.createdAt = {
+										type: Sequelize.BIGINT,
+										allowNull: false
+									};
+									attrs.updatedAt = {
+										type: Sequelize.BIGINT,
+										allowNull: false
+									};
+									attrs.version = {
+										type: Sequelize.BIGINT,
+										allowNull: false
+									};
+									return sequelize.define(name, attrs, {
+										tableName: name,
+										timestamps: false,
+										hooks: {
+											beforeValidate: function (obj) {
+												let now = Date.now();
+												if (obj.isNewRecord) {
+													if (!obj.id) {
+														obj.id = generateId();
+													}
+													obj.createdAt = now;
+													obj.updatedAt = now;
+													obj.version = 0;
+												} else {
+													obj.updatedAt = Date.now();
+													obj.version++;
+												}
+											}
+										}
+									});
+								}
+								定义的defineModel就是为了强制实现上述规则
+								Sequelize在创建、修改Entity时会调用我们指定的函数，这些函数通过hooks在定义Model时设定
+								在beforeValidate这个事件中根据是否是isNewRecord设置主键（如果主键为null或undefined）、设置时间戳和版本号
+						数据库配置
+							把简单的config.js拆成3个配置文件：
+								config-default.js：存储默认的配置；
+									var config = {
+										dialect: 'mysql',
+										database: 'nodejs',
+										username: 'www',
+										password: 'www',
+										host: 'localhost',
+										port: 3306
+									};
+									module.exports = config;
+								config-override.js：存储特定的配置；
+									var config = {
+										database: 'production',
+										username: 'www',
+										password: 'secret-password',
+										host: '192.168.1.199'
+									};
+									module.exports = config;
+								config-test.js：存储用于测试的配置。
+									var config = {
+										database: 'test'
+									};
+									module.exports = config;
+								读取配置的时候，我们用config.js实现不同环境读取不同的配置文件
+									const defaultConfig = './config-default.js';
+									// 可设定为绝对路径，如 /opt/product/config-override.js
+									const overrideConfig = './config-override.js';
+									const testConfig = './config-test.js';
+
+									const fs = require('fs');
+
+									var config = null;
+
+									if (process.env.NODE_ENV === 'test') {
+										console.log(`Load ${testConfig}...`);
+										config = require(testConfig);
+									} else {
+										console.log(`Load ${defaultConfig}...`);
+										config = require(defaultConfig);
+										try {
+											if (fs.statSync(overrideConfig).isFile()) {
+												console.log(`Load ${overrideConfig}...`);
+												config = Object.assign(config, require(overrideConfig));
+											}
+										} catch (err) {
+											console.log(`Cannot load ${overrideConfig}.`);
+										}
+									}
+									module.exports = config;
+								具体的规则是：
+									先读取config-default.js；
+									如果不是测试环境，就读取config-override.js，如果文件不存在，就忽略。
+									如果是测试环境，就读取config-test.js。
+								这样做的好处是
+									开发环境下，团队统一使用默认的配置，并且无需config-override.js
+									部署到服务器时，由运维团队配置好config-override.js，以覆盖config-override.js的默认设置
+									测试环境下，本地和CI服务器统一使用config-test.js，测试数据库可以反复清空，不会影响开发
+						使用Model
+							要使用Model，就需要引入对应的Model文件，例如：User.js
+							写一个model.js，自动扫描并导入所有Model：
+								const fs = require('fs');
+								const db = require('./db');
+
+								let files = fs.readdirSync(__dirname + '/models');
+
+								let js_files = files.filter((f)=>{
+									return f.endsWith('.js');
+								}, files);
+
+								module.exports = {};
+
+								for (let f of js_files) {
+									console.log(`import model from file ${f}...`);
+									let name = f.substring(0, f.length - 3);
+									module.exports[name] = require(__dirname + '/models/' + f);
+								}
+
+								module.exports.sync = () => {
+									db.sync();
+								};
+							这样，需要用的时候，写起来就像这样
+								const model = require('./model');
+								let
+									Pet = model.Pet,
+									User = model.User;
+
+								var pet = await Pet.create({ ... });
+						工程结构
+							最终，创建的工程model-sequelize结构
+								model-sequelize/
+								|
+								+- .vscode/
+								|  |
+								|  +- launch.json <-- VSCode 配置文件
+								|
+								+- models/ <-- 存放所有Model
+								|  |
+								|  +- Pet.js <-- Pet
+								|  |
+								|  +- User.js <-- User
+								|
+								+- config.js <-- 配置文件入口
+								|
+								+- config-default.js <-- 默认配置文件
+								|
+								+- config-test.js <-- 测试配置文件
+								|
+								+- db.js <-- 如何定义Model
+								|
+								+- model.js <-- 如何导入Model
+								|
+								+- init-db.js <-- 初始化数据库
+								|
+								+- app.js <-- 业务代码
+								|
+								+- start.js <-- 启动入口js
+								|
+								+- package.json <-- 项目描述文件
+								|
+								+- node_modules/ <-- npm安装的所有依赖包
+							注意，其实不需要创建表的SQL，因为Sequelize提供了一个sync()方法，可以自动创建数据库
+							这个功能在开发和生产环境中没有什么用，但是在测试环境中非常有用
+							测试时，我们可以用sync()方法自动创建出表结构，而不是自己维护SQL脚本
+							这样，可以随时修改Model的定义，并立刻运行测试。
+							开发环境下，首次使用sync()也可以自动创建出表结构，避免了手动运行SQL的问题
+							init-db.js的代码非常简单
+								require('babel-core/register')({
+									presets: ['stage-3']
+								});
+
+								const model = require('./model.js');
+								model.sync();
+
+								console.log('init db ok.');
+								process.exit(0);
+								它最大的好处是避免了手动维护一个SQL脚本
+			mocha
+				测试驱动开发”（TDD：Test-Driven Development）
+				单元测试是用来对一个模块、一个函数或者一个类来进行正确性检验的测试工作
+					比如对函数abs()，我们可以编写出以下几个测试用例
+						输入正数，比如1、1.2、0.99，期待返回值与输入相同；
+
+						输入负数，比如-1、-1.2、-0.99，期待返回值与输入相反；
+
+						输入0，期待返回0；
+
+						输入非数值类型，比如null、[]、{}，期待抛出Error
+				把上面的测试用例放到一个测试模块里，就是一个完整的单元测试
+				如果单元测试通过，说明我们测试的这个函数能够正常工作。如果单元测试不通过，要么函数有bug，要么测试条件输入不正确，总之，需要修复使单元测试能够通过
+				单元测试通过后有什么意义呢？
+					如果我们对abs()函数代码做了修改，只需要再跑一遍单元测试
+						如果通过，说明我们的修改不会对abs()函数原有的行为造成影响
+						如果测试不通过，说明我们的修改与原有行为不一致，要么修改代码，要么修改测试
+					这种以测试为驱动的开发模式最大的好处就是确保一个程序模块的行为符合我们设计的测试用例
+					在将来修改的时候，可以极大程度地保证该模块行为仍然是正确的
+				mocha是JavaScript的一种单元测试框架，既可以在浏览器环境下运行，也可以在Node.js环境下运行
+				使用mocha，我们就只需要专注于编写单元测试本身，然后，让mocha去自动运行所有的测试，并给出测试结果
+				mocha的特点主要有：
+					既可以测试简单的JavaScript函数，又可以测试异步代码，因为异步是JavaScript的特性之一；
+
+					可以自动运行所有测试，也可以只运行特定的测试；
+
+					可以支持before、after、beforeEach和afterEach来编写初始化代码。
+				编写测试
+					假设编写一个hello.js，并且输出一个简单的求和函数
+						// hello.js
+
+						module.exports = function (...rest) {
+							var sum = 0;
+							for (let n of rest) {
+								sum += n;
+							}
+							return sum;
+						};
+					这个函数非常简单，就是对输入的任意参数求和并返回结果
+					如果想对这个函数进行测试，可以写一个test.js，然后使用Node.js提供的assert模块进行断言
+						// test.js
+
+						const assert = require('assert');
+						const sum = require('./hello');
+
+						assert.strictEqual(sum(), 0);
+						assert.strictEqual(sum(1), 1);
+						assert.strictEqual(sum(1, 2), 3);
+						assert.strictEqual(sum(1, 2, 3), 6);
+						
+						assert模块非常简单，它断言一个表达式为true。如果断言失败，就抛出Error
+					单独写一个test.js的缺点是没法自动运行测试，而且，如果第一个assert报错，后面的测试也执行不了了
+					如果有很多测试需要运行，就必须把这些测试全部组织起来，然后统一执行，并且得到执行结果
+					这就是我们为什么要用mocha来编写并运行测试
+					mocha test
+						创建hello-test工程来编写hello.js以及相关测试。工程结构如下
+							hello-test/
+							|
+							+- .vscode/
+							|  |
+							|  +- launch.json <-- VSCode 配置文件
+							|
+							+- hello.js <-- 待测试js文件
+							|
+							+- test/ <-- 存放所有test
+							｜ ｜
+							|  +- hello-test.js <-- 测试文件
+							|
+							+- package.json <-- 项目描述文件
+							|
+							+- node_modules/ <-- npm安装的所有依赖包
+						首先在package.json中添加mocha的依赖包。和其他依赖包不同，这次我们并没有把依赖包添加到 "dependencies"中，而是"devDependencies"：
+							{
+							  ...
+
+							  "dependencies": {},
+							  "devDependencies": {
+								"mocha": "3.0.2"
+							  }
+							}
+							如果一个模块在运行的时候并不需要，仅仅在开发时才需要，就可以放到devDependencies中。这样，正式打包发布时，devDependencies的包不会被包含进来
+						然后使用npm install安装
+							注意，很多文章会让你用命令npm install -g mocha把mocha安装到全局module中。这是不需要的。尽量不要安装全局模块，因为全局模块会影响到所有Node.js的工程
+						紧接着，我们在test目录下创建hello-test.js来编写测试
+							mocha默认会执行test目录下的所有测试，不要去改变默认目录
+							hello-test.js内容如下
+								const assert = require('assert');
+								const sum = require('../hello');
+
+								describe('#hello.js', () => {
+
+									describe('#sum()', () => {
+										it('sum() should return 0', () => {
+											assert.strictEqual(sum(), 0);
+										});
+
+										it('sum(1) should return 1', () => {
+											assert.strictEqual(sum(1), 1);
+										});
+
+										it('sum(1, 2) should return 3', () => {
+											assert.strictEqual(sum(1, 2), 3);
+										});
+
+										it('sum(1, 2, 3) should return 6', () => {
+											assert.strictEqual(sum(1, 2, 3), 6);
+										});
+									});
+								});
+								这里使用mocha默认的BDD-style的测试。describe可以任意嵌套，以便把相关测试看成一组测试
+								每个it("name", function() {...})就代表一个测试
+								例如，为了测试sum(1, 2)，我们这样写
+									it('sum(1, 2) should return 3', () => {
+										assert.strictEqual(sum(1, 2), 3);
+									});
+									
+							编写测试的原则是，一次只测一种情况，且测试代码要非常简单。
+							编写多个测试来分别测试不同的输入，并使用assert判断输出是否是我们所期望的
+					运行测试
+						如何运行？有三种方法
+							方法一，可以打开命令提示符，切换到hello-test目录，然后执行命令
+								C:\...\hello-test> node_modules\mocha\bin\mocha
+								mocha就会自动执行所有测试，然后输出如下：
+								  #hello.js
+									#sum()
+									  ? sum() should return 0
+									  ? sum(1) should return 1
+									  ? sum(1, 2) should return 3
+									  ? sum(1, 2, 3) should return 6
+								  4 passing (7ms)
+							方法二，我们在package.json中添加npm命令
+								{
+								  ...
+
+								  "scripts": {
+									"test": "mocha"
+								  },
+
+								  ...
+								}
+								然后在hello-test目录下执行命令
+									C:\...\hello-test> npm test
+							方法三，我们在VS Code中创建配置文件.vscode/launch.json，然后编写两个配置选项
+								{
+									"version": "0.2.0",
+									"configurations": [
+										{
+											"name": "Run",
+											"type": "node",
+											"request": "launch",
+											"program": "${workspaceRoot}/hello.js",
+											"stopOnEntry": false,
+											"args": [],
+											"cwd": "${workspaceRoot}",
+											"preLaunchTask": null,
+											"runtimeExecutable": null,
+											"runtimeArgs": [
+												"--nolazy"
+											],
+											"env": {
+												"NODE_ENV": "development"
+											},
+											"externalConsole": false,
+											"sourceMaps": false,
+											"outDir": null
+										},
+										{
+											"name": "Test",
+											"type": "node",
+											"request": "launch",
+											"program": "${workspaceRoot}/node_modules/mocha/bin/mocha",
+											"stopOnEntry": false,
+											"args": [],
+											"cwd": "${workspaceRoot}",
+											"preLaunchTask": null,
+											"runtimeExecutable": null,
+											"runtimeArgs": [
+												"--nolazy"
+											],
+											"env": {
+												"NODE_ENV": "test"
+											},
+											"externalConsole": false,
+											"sourceMaps": false,
+											"outDir": null
+										}
+									]
+								}
+								注意
+									第一个配置选项Run是正常执行一个.js文件
+									第二个配置选项Test我们填入"program": "${workspaceRoot}/node_modules/mocha/bin/mocha"，并设置env为"NODE_ENV": "test"，这样，就可以在VS Code中打开Debug面板，选择Test，运行，即可在Console面板中看到测试结果
+							before和after
+								在测试前初始化资源，测试后释放资源是非常常见的。
+								mocha提供了before、after、beforeEach和afterEach来实现这些功能
+								把hello-test.js改为
+									const assert = require('assert');
+									const sum = require('../hello');
+
+									describe('#hello.js', () => {
+										describe('#sum()', () => {
+											before(function () {
+												console.log('before:');
+											});
+
+											after(function () {
+												console.log('after.');
+											});
+
+											beforeEach(function () {
+												console.log('  beforeEach:');
+											});
+
+											afterEach(function () {
+												console.log('  afterEach.');
+											});
+
+											it('sum() should return 0', () => {
+												assert.strictEqual(sum(), 0);
+											});
+
+											it('sum(1) should return 1', () => {
+												assert.strictEqual(sum(1), 1);
+											});
+
+											it('sum(1, 2) should return 3', () => {
+												assert.strictEqual(sum(1, 2), 3);
+											});
+
+											it('sum(1, 2, 3) should return 6', () => {
+												assert.strictEqual(sum(1, 2, 3), 6);
+											});
+										});
+									});
+									
+								再次运行，可以看到每个test执行前后会分别执行beforeEach()和afterEach()，以及一组test执行前后会分别执行before()和after()
+										#hello.js
+										#sum()
+									before:
+									  beforeEach:
+										  ? sum() should return 0
+									  afterEach.
+									  beforeEach:
+										  ? sum(1) should return 1
+									  afterEach.
+									  beforeEach:
+										  ? sum(1, 2) should return 3
+									  afterEach.
+									  beforeEach:
+										  ? sum(1, 2, 3) should return 6
+									  afterEach.
+									after.
+									  4 passing (8ms)
+				异步测试
+					在JavaScript的世界中，更多的时候，我们编写的是异步代码，所以，我们需要用mocha测试异步函数
+					把上一节的hello-test工程复制一份，重命名为async-test，然后，把hello.js改造为异步函数
+						const fs = require('mz/fs');
+
+						// a simple async function:
+						module.exports = async () => {
+							let expression = await fs.readFile('./data.txt', 'utf-8');
+							let fn = new Function('return ' + expression);
+							let r = fn();
+							console.log(`Calculate: ${expression} = ${r}`);
+							return r;
+						};
+						这个async函数通过读取data.txt的内容获取表达式，这样它就变成了异步。
+					编写一个data.txt文件，内容如下：
+						1 + (2 + 4) * (9 - 2) / 3
+					在package.json中添加依赖包
+						"dependencies": {
+							"babel-core": "6.13.2",
+							"babel-polyfill": "6.13.0",
+							"babel-preset-es2015-node6": "0.3.0",
+							"babel-preset-stage-3": "6.5.0",
+							"mz": "2.4.0"
+						},
+					紧接着，在test目录中添加一个await-test.js，测试hello.js的async函数
+						先看看mocha如何实现异步测试
+							如果要测试同步函数，我们传入无参数函数即可
+								it('test sync function', function () {
+									// TODO:
+									assert(true);
+								});
+							如果要测试异步函数，传入的函数需要带一个参数，通常命名为done
+								it('test async function', function (done) {
+									fs.readFile('filepath', function (err, data) {
+										if (err) {
+											done(err);
+										} else {
+											done();
+										}
+									});
+								});
+							测试异步函数需要在函数内部手动调用done()表示测试成功，done(err)表示测试出错
+							对于用ES7的async编写的函数，可以这么写
+								it('#async with done', (done) => {
+									(async function () {
+										try {
+											let r = await hello();
+											assert.strictEqual(r, 15);
+											done();
+										} catch (err) {
+											done(err);
+										}
+									})();
+								});
+							但是用try...catch太麻烦。还有一种更简单的写法，就是直接把async函数当成同步函数来测试
+								it('#async function', async () => {
+									let r = await hello();
+									assert.strictEqual(r, 15);
+								});
+					工程async-test，结构如下
+						async-test/
+						|
+						+- .vscode/
+						|  |
+						|  +- launch.json <-- VSCode 配置文件
+						|
+						+- hello.js <-- 待测试js文件
+						|
+						+- data.txt <-- 数据文件
+						|
+						+- test/ <-- 存放所有test
+						｜ ｜
+						|  +- await-test.js <-- 异步测试
+						|
+						+- package.json <-- 项目描述文件
+						|
+						+- node_modules/ <-- npm安装的所有依赖包
+					现在运行mocha，不出意外，我们会得到一个SyntaxError。
+						这是因为mocha会启动Node.js进程，然后运行测试，但是，这个过程中并没有加载Babel转换器，因此，遇到async和await关键字就会报错
+						解决方法是让mocha在测试前加载Babel即可
+							mocha提供了一个命令行参数--require可以加载指定的包。我们利用这个特性，就可以编写一个hook.js
+								require('babel-core/register')({
+									presets: ['stage-3']
+								});
+							然后，在命令行窗口运行命令node_modules\mocha\bin\mocha --require hook，测试就可以正常执行
+									#async hello
+									#asyncCalculate()
+								Calculate: 1 + (2 + 4) * (9 - 2) / 3 = 15
+									  ? #async function
+								  1 passing (11ms)
+						第二种方法是在package.json中把script改为：
+							"scripts": {
+								"test": "mocha --require hook"
+							}
+							这样就可以在命令行窗口通过npm test执行测试
+						第三种方法是在VS Code配置文件中把args改为：
+							"args": [
+								"--require",
+								"hook"
+							]
+							这样就可以在VS Code中直接运行测试
+					编写异步代码时，我们要坚持使用async和await关键字，这样，编写测试也同样简单
 			
 		
 			
